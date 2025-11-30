@@ -55,11 +55,44 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173", "*"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setExposedHeaders(List.of("Authorization"));
-        configuration.setAllowCredentials(false);
+        
+        // Orígenes permitidos
+        configuration.setAllowedOrigins(Arrays.asList(
+            "http://localhost:5173",                                    // Vite dev local
+            "http://localhost:4173",                                    // Vite preview local
+            "http://localhost:3000",                                    // React dev local
+            "https://expert-broccoli-4jgvg6964v59hqv74-5173.app.github.dev",       // Frontend Codespace
+            "https://reimagined-succotash-r4r6rwvw9w46hxqjx-5173.app.github.dev",  // Backend Codespace (opcional)
+            "https://react-prueba-azure.vercel.app"                     // Vercel producción
+        ));
+        
+        // Métodos HTTP permitidos
+        configuration.setAllowedMethods(Arrays.asList(
+            "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
+        ));
+        
+        // Headers permitidos
+        configuration.setAllowedHeaders(Arrays.asList(
+            "Authorization",
+            "Content-Type",
+            "X-Requested-With",
+            "Accept",
+            "Origin",
+            "Access-Control-Request-Method",
+            "Access-Control-Request-Headers"
+        ));
+        
+        // Headers expuestos al cliente
+        configuration.setExposedHeaders(Arrays.asList(
+            "Authorization",
+            "Content-Disposition"
+        ));
+        
+        // Permitir credenciales (cookies, authorization headers)
+        configuration.setAllowCredentials(true);
+        
+        // Tiempo de cache para preflight requests (1 hora)
+        configuration.setMaxAge(3600L);
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
