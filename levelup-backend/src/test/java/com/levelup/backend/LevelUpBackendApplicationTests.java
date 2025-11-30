@@ -1,13 +1,12 @@
-package com.levelup.levelup_backend;
+package com.levelup.backend;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class LevelupBackendApplicationTests {
+class LevelUpBackendApplicationTests {
 
-	@Test
-	void contextLoads() {
-	}
-
+    @Test
+    void contextLoads() {
+    }
 }
