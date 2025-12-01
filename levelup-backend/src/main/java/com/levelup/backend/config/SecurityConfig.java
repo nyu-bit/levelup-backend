@@ -59,11 +59,13 @@ public class SecurityConfig {
         // Orígenes permitidos
         configuration.setAllowedOrigins(Arrays.asList(
             "http://localhost:5173",                                    // Vite dev local
+            "http://localhost:5174",                                    // Vite dev local alt
             "http://localhost:4173",                                    // Vite preview local
             "http://localhost:3000",                                    // React dev local
             "https://expert-broccoli-4jgvg6964v59hqv74-5173.app.github.dev",       // Frontend Codespace
-            "https://reimagined-succotash-r4r6rwvw9w46hxqjx-5173.app.github.dev",  // Backend Codespace (opcional)
-            "https://react-prueba-azure.vercel.app"                     // Vercel producción
+            "https://reimagined-succotash-r4r6rwvw9w46hxqjx-5173.app.github.dev",  // Backend Codespace
+            "https://react-prueba-azure.vercel.app",                    // Vercel producción
+            "https://react-prueba-three.vercel.app"                     // Vercel producción nuevo
         ));
         
         // Métodos HTTP permitidos
@@ -133,7 +135,13 @@ public class SecurityConfig {
                 
                 // Ventas: /all solo para ADMIN y VENDEDOR
                 .requestMatchers("/api/v1/sales/all").hasAnyRole("ADMIN", "VENDEDOR")
-                .requestMatchers("/api/v1/sales/transbank/callback").permitAll()
+                
+                // Transbank endpoints
+                .requestMatchers(HttpMethod.POST, "/api/v1/sales/transbank/callback").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/sales/payment-status/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/sales/transbank/init").authenticated()
+                
+                // Resto de ventas requieren autenticación
                 .requestMatchers("/api/v1/sales/**").authenticated()
                 
                 // Todo lo demás requiere autenticación

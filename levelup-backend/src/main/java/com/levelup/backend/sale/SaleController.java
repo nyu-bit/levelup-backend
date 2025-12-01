@@ -1,6 +1,6 @@
 package com.levelup.backend.sale;
 
-import com.levelup.backend.dto.SaleRequest;
+import com.levelup.backend.dto.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -25,12 +25,62 @@ public class SaleController {
     
     private final SaleService saleService;
     
-    @PostMapping
-    public ResponseEntity<Sale> createSale(
-            @Valid @RequestBody SaleRequest request,
+    // =============================================
+    // TRANSBANK MOCK ENDPOINTS
+    // =============================================
+    
+    /**
+     * Inicializa una transacción Transbank (simulado)
+     * Crea venta PENDING, valida stock, genera token
+     * NO descuenta stock hasta el callback AUTHORIZED
+     */
+    @PostMapping("/transbank/init")
+    public ResponseEntity<InitTransactionResponse> initTransaction(
+            @Valid @RequestBody InitTransactionRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
-        Sale sale = saleService.createSale(request, userDetails.getUsername());
-        return ResponseEntity.status(HttpStatus.CREATED).body(sale);
+        InitTransactionResponse response = saleService.initTransaction(request, userDetails.getUsername());
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+    
+    /**
+     * Callback de Transbank (simulado) - PÚBLICO
+     * Recibe token y status (AUTHORIZED/FAILED)
+     * Si AUTHORIZED: aprueba venta y descuenta stock
+     * Si FAILED: rechaza venta
+     */
+    @PostMapping("/transbank/callback")
+    public ResponseEntity<TransbankCallbackResponse> transbankCallback(
+            @Valid @RequestBody TransbankCallbackRequest request) {
+        TransbankCallbackResponse response = saleService.processCallback(request);
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * Consulta el estado de un pago por token
+     */
+    @GetMapping("/payment-status/{token}")
+    public ResponseEntity<PaymentStatusResponse> getPaymentStatus(@PathVariable String token) {
+        PaymentStatusResponse response = saleService.getPaymentStatus(token);
+        return ResponseEntity.ok(response);
+    }
+    
+    // =============================================
+    // SALES CRUD ENDPOINTS
+    // =============================================
+    
+    /**
+     * Crea una venta con simulación Transbank (auto-approve)
+     * - Valida stock
+     * - Calcula subtotal, iva (19%), total
+     * - Genera token Transbank
+     * - Auto-aprueba y descuenta stock
+     */
+    @PostMapping
+    public ResponseEntity<SaleResponse> createSale(
+            @Valid @RequestBody CreateSaleRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        SaleResponse response = saleService.createSaleWithAutoApprove(request, userDetails.getUsername());
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
     
     @GetMapping
@@ -59,13 +109,5 @@ public class SaleController {
         Pageable pageable = PageRequest.of(page, size);
         Page<Sale> sales = saleService.getAllSales(pageable);
         return ResponseEntity.ok(sales);
-    }
-    
-    @PostMapping("/transbank/callback")
-    public ResponseEntity<Sale> handleTransbankCallback(
-            @RequestParam String token,
-            @RequestParam String status) {
-        Sale sale = saleService.handleTransbankCallback(token, status);
-        return ResponseEntity.ok(sale);
     }
 }
