@@ -65,7 +65,9 @@ public class SecurityConfig {
             "https://expert-broccoli-4jgvg6964v59hqv74-5173.app.github.dev",       // Frontend Codespace
             "https://reimagined-succotash-r4r6rwvw9w46hxqjx-5173.app.github.dev",  // Backend Codespace
             "https://react-prueba-azure.vercel.app",                    // Vercel producción
-            "https://react-prueba-three.vercel.app"                     // Vercel producción nuevo
+            "https://react-prueba-three.vercel.app",                    // Vercel producción nuevo
+            "https://levelupgamer.lol",                                 // Dominio producción
+            "https://www.levelupgamer.lol"                              // Dominio producción www
         ));
         
         // Métodos HTTP permitidos
