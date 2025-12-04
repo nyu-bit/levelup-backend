@@ -110,8 +110,8 @@ public class SecurityConfig {
             // Deshabilitar CSRF (usamos JWT, no sesiones)
             .csrf(AbstractHttpConfigurer::disable)
             
-            // Configurar CORS
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            // Configurar CORS (usa CorsFilter de CorsConfig)
+            .cors(cors -> {})
             
             // Configurar sesión STATELESS
             .sessionManagement(session -> 
