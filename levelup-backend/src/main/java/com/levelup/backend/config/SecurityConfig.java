@@ -22,7 +22,6 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -52,45 +51,31 @@ public class SecurityConfig {
         return authConfig.getAuthenticationManager();
     }
     
+    /**
+     * Configuración CORS centralizada
+     * Permite cualquier origen para facilitar la evaluación
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        // Orígenes permitidos
-        configuration.setAllowedOrigins(Arrays.asList(
-            "http://localhost:5173",                                    // Vite dev local
-            "http://localhost:5174",                                    // Vite dev local alt
-            "http://localhost:4173",                                    // Vite preview local
-            "http://localhost:3000",                                    // React dev local
-            "https://expert-broccoli-4jgvg6964v59hqv74-5173.app.github.dev",       // Frontend Codespace
-            "https://reimagined-succotash-r4r6rwvw9w46hxqjx-5173.app.github.dev",  // Backend Codespace
-            "https://react-prueba-azure.vercel.app",                    // Vercel producción
-            "https://react-prueba-three.vercel.app",                    // Vercel producción
-            "https://react-prueba-git-main-maria-jose-contreras-s-projects.vercel.app", // Vercel branch
-            "https://levelupgamer.lol",                                 // Dominio producción
-            "https://www.levelupgamer.lol"                              // Dominio producción www
-        ));
+        // Permitir cualquier origen (para evaluación)
+        configuration.setAllowedOriginPatterns(List.of("*"));
         
         // Métodos HTTP permitidos
-        configuration.setAllowedMethods(Arrays.asList(
+        configuration.setAllowedMethods(List.of(
             "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
         ));
         
-        // Headers permitidos
-        configuration.setAllowedHeaders(Arrays.asList(
-            "Authorization",
-            "Content-Type",
-            "X-Requested-With",
-            "Accept",
-            "Origin",
-            "Access-Control-Request-Method",
-            "Access-Control-Request-Headers"
-        ));
+        // Headers permitidos - todos
+        configuration.setAllowedHeaders(List.of("*"));
         
         // Headers expuestos al cliente
-        configuration.setExposedHeaders(Arrays.asList(
+        configuration.setExposedHeaders(List.of(
             "Authorization",
-            "Content-Disposition"
+            "Content-Disposition",
+            "Access-Control-Allow-Origin",
+            "Access-Control-Allow-Credentials"
         ));
         
         // Permitir credenciales (cookies, authorization headers)
@@ -110,8 +95,8 @@ public class SecurityConfig {
             // Deshabilitar CSRF (usamos JWT, no sesiones)
             .csrf(AbstractHttpConfigurer::disable)
             
-            // Configurar CORS (usa CorsFilter de CorsConfig)
-            .cors(cors -> {})
+            // Configurar CORS usando el CorsConfigurationSource definido arriba
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             
             // Configurar sesión STATELESS
             .sessionManagement(session -> 
@@ -120,6 +105,9 @@ public class SecurityConfig {
             
             // Configurar autorización de requests
             .authorizeHttpRequests(auth -> auth
+                // ⚠️ IMPORTANTE: Permitir TODAS las peticiones OPTIONS (preflight CORS)
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                
                 // Endpoints públicos de autenticación
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 
@@ -139,10 +127,9 @@ public class SecurityConfig {
                 // Ventas: /all solo para ADMIN y VENDEDOR
                 .requestMatchers("/api/v1/sales/all").hasAnyRole("ADMIN", "VENDEDOR")
                 
-                // Transbank endpoints
+                // Transbank endpoints públicos
                 .requestMatchers(HttpMethod.POST, "/api/v1/sales/transbank/callback").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/sales/payment-status/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/sales/transbank/init").authenticated()
                 
                 // Resto de ventas requieren autenticación
                 .requestMatchers("/api/v1/sales/**").authenticated()
