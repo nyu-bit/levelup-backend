@@ -80,6 +80,10 @@ public class SecurityConfig {
                 // H2 Console (solo dev)
                 .requestMatchers("/h2-console/**").permitAll()
                 
+                // Payment endpoints - test público, init requiere auth
+                .requestMatchers("/api/v1/payments/test").permitAll()
+                .requestMatchers("/api/v1/payments/**").authenticated()
+                
                 // Productos: modificaciones requieren rol ADMIN
                 .requestMatchers(HttpMethod.POST, "/api/v1/products/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/products/**").hasRole("ADMIN")

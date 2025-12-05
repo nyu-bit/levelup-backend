@@ -1,11 +1,14 @@
 package com.levelup.backend.sale;
 
 import com.levelup.backend.dto.*;
+import com.levelup.backend.payment.PaymentResponse;
+import com.levelup.backend.payment.PaymentService;
 import com.levelup.backend.product.Product;
 import com.levelup.backend.product.ProductRepository;
 import com.levelup.backend.user.User;
 import com.levelup.backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -13,17 +16,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SaleService {
     
     private final SaleRepository saleRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final PaymentService paymentService;
     
     // Porcentaje de IVA
     private static final double IVA_PERCENTAGE = 0.19;
@@ -33,6 +39,163 @@ public class SaleService {
     
     // URL simulada de Webpay
     private static final String WEBPAY_MOCK_URL = "https://webpay.mock/redirect";
+
+    /**
+     * Crea una venta y procesa el pago a través del mock de Transbank.
+     * - Genera orderId único (UUID)
+     * - Llama al PaymentService.procesarPagoConMock
+     * - Marca la venta como APPROVED o REJECTED según respuesta
+     * - Retorna SaleSummaryDto con el resumen
+     */
+    @Transactional
+    public SaleSummaryDto createSaleWithPayment(SaleRequestDto request, String userEmail) {
+        log.info("Creando venta con pago para usuario: {}", userEmail);
+        
+        // Buscar usuario
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+        
+        // Generar orderId único
+        String orderId = UUID.randomUUID().toString();
+        log.info("OrderId generado: {}", orderId);
+        
+        // Crear la venta con estado PENDING
+        Sale sale = Sale.builder()
+                .user(user)
+                .status(SaleStatus.PENDING)
+                .transbankToken(orderId) // Usamos orderId como token inicial
+                .build();
+        
+        int subtotal = 0;
+        
+        // Procesar cada item (validar productos y stock, pero NO descontar aún)
+        for (SaleItemRequest itemRequest : request.getItems()) {
+            Product product = productRepository.findById(itemRequest.getProductId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "Producto no encontrado con ID: " + itemRequest.getProductId()));
+            
+            // Verificar stock suficiente
+            if (product.getStock() < itemRequest.getQuantity()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Stock insuficiente para '" + product.getName() + 
+                        "'. Disponible: " + product.getStock() + ", solicitado: " + itemRequest.getQuantity());
+            }
+            
+            // Crear item de venta (sin descontar stock todavía)
+            SaleItem saleItem = SaleItem.builder()
+                    .product(product)
+                    .quantity(itemRequest.getQuantity())
+                    .unitPrice(product.getPrice())
+                    .build();
+            
+            sale.addItem(saleItem);
+            subtotal += product.getPrice() * itemRequest.getQuantity();
+        }
+        
+        // Calcular IVA (19%)
+        int iva = (int) Math.round(subtotal * IVA_PERCENTAGE);
+        
+        // Calcular shipping
+        boolean includeShipping = request.getIncludeShipping() == null || request.getIncludeShipping();
+        int shipping = includeShipping ? SHIPPING_COST : 0;
+        
+        // Calcular total
+        int total = subtotal + iva + shipping;
+        
+        sale.setSubtotal(subtotal);
+        sale.setIva(iva);
+        sale.setShipping(shipping);
+        sale.setTotal(total);
+        
+        // Guardar venta en estado PENDING
+        Sale savedSale = saleRepository.save(sale);
+        log.info("Venta guardada con ID: {}, estado: PENDING", savedSale.getId());
+        
+        // ========================================
+        // LLAMAR AL MOCK DE TRANSBANK
+        // ========================================
+        PaymentResponse paymentResponse;
+        String paymentMessage;
+        String authorizationCode = null;
+        
+        try {
+            boolean useMockLocal = request.getUseMockLocal() != null && request.getUseMockLocal();
+            
+            if (useMockLocal) {
+                log.info("Usando mock LOCAL para pago");
+                paymentResponse = paymentService.procesarPagoMockLocal(orderId, BigDecimal.valueOf(total));
+            } else {
+                log.info("Llamando al mock EXTERNO de Transbank");
+                paymentResponse = paymentService.procesarPagoConMock(orderId, BigDecimal.valueOf(total));
+            }
+            
+            // Actualizar token con el que devuelve el mock
+            if (paymentResponse.getToken() != null) {
+                savedSale.setTransbankToken(paymentResponse.getToken());
+            }
+            
+            // Procesar respuesta del mock
+            if (paymentResponse.isSuccessful()) {
+                // PAGO APROBADO
+                savedSale.setStatus(SaleStatus.APPROVED);
+                paymentMessage = paymentResponse.getMessage() != null ? 
+                        paymentResponse.getMessage() : "Pago aprobado exitosamente";
+                authorizationCode = paymentResponse.getAuthorizationCode();
+                
+                // Descontar stock
+                for (SaleItem item : savedSale.getItems()) {
+                    Product product = item.getProduct();
+                    product.setStock(product.getStock() - item.getQuantity());
+                    productRepository.save(product);
+                }
+                log.info("Pago APROBADO - Stock descontado");
+                
+            } else {
+                // PAGO RECHAZADO
+                savedSale.setStatus(SaleStatus.REJECTED);
+                paymentMessage = paymentResponse.getMessage() != null ? 
+                        paymentResponse.getMessage() : "Pago rechazado";
+                log.warn("Pago RECHAZADO: {}", paymentMessage);
+            }
+            
+        } catch (Exception e) {
+            log.error("Error al procesar pago con mock: {}", e.getMessage());
+            savedSale.setStatus(SaleStatus.REJECTED);
+            paymentMessage = "Error al procesar el pago: " + e.getMessage();
+        }
+        
+        // Guardar venta con estado final
+        Sale finalSale = saleRepository.save(savedSale);
+        
+        // Construir items para el resumen
+        List<SaleSummaryDto.SaleItemSummary> itemSummaries = finalSale.getItems().stream()
+                .map(item -> SaleSummaryDto.SaleItemSummary.builder()
+                        .productId(item.getProduct().getId())
+                        .productName(item.getProduct().getName())
+                        .quantity(item.getQuantity())
+                        .unitPrice(item.getUnitPrice())
+                        .totalPrice(item.getUnitPrice() * item.getQuantity())
+                        .build())
+                .toList();
+        
+        // Construir y retornar SaleSummaryDto
+        return SaleSummaryDto.builder()
+                .orderNumber(orderId)
+                .saleId(finalSale.getId())
+                .status(finalSale.getStatus())
+                .statusDescription(SaleSummaryDto.getStatusDescription(finalSale.getStatus()))
+                .subtotal(finalSale.getSubtotal())
+                .iva(finalSale.getIva())
+                .shipping(finalSale.getShipping())
+                .total(finalSale.getTotal())
+                .transbankToken(finalSale.getTransbankToken())
+                .authorizationCode(authorizationCode)
+                .paymentMessage(paymentMessage)
+                .createdAt(finalSale.getCreatedAt())
+                .itemsCount(finalSale.getItems().size())
+                .items(itemSummaries)
+                .build();
+    }
     
     /**
      * Crea una venta y SIMULA Transbank internamente (auto-approve)

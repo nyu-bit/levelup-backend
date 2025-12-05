@@ -3,6 +3,7 @@ package com.levelup.backend.sale;
 import com.levelup.backend.dto.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -15,18 +16,77 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/sales")
 @RequiredArgsConstructor
+@Slf4j
 public class SaleController {
     
     private final SaleService saleService;
     
     // =============================================
-    // TRANSBANK MOCK ENDPOINTS
+    // NUEVO ENDPOINT CON INTEGRACIÓN TRANSBANK MOCK
+    // =============================================
+    
+    /**
+     * Crea una venta y procesa el pago con el mock de Transbank.
+     * POST /api/v1/sales/checkout
+     * 
+     * - Genera orderId único (UUID)
+     * - Llama al PaymentService.procesarPagoConMock
+     * - Marca la venta como PAGADO o RECHAZADO
+     * - Retorna SaleSummaryDto con el resumen
+     */
+    @PostMapping("/checkout")
+    public ResponseEntity<?> checkout(
+            @Valid @RequestBody SaleRequestDto request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        
+        log.info("Procesando checkout para usuario: {}", userDetails.getUsername());
+        
+        try {
+            SaleSummaryDto summary = saleService.createSaleWithPayment(request, userDetails.getUsername());
+            
+            // Si fue aprobado, retornar 201 CREATED
+            if (summary.getStatus() == SaleStatus.APPROVED) {
+                log.info("Checkout exitoso - OrderNumber: {}, Total: {}", 
+                        summary.getOrderNumber(), summary.getTotal());
+                return ResponseEntity.status(HttpStatus.CREATED).body(summary);
+            }
+            
+            // Si fue rechazado, retornar 200 OK pero con status REJECTED
+            log.warn("Checkout rechazado - OrderNumber: {}", summary.getOrderNumber());
+            return ResponseEntity.ok(summary);
+            
+        } catch (Exception e) {
+            log.error("Error en checkout: {}", e.getMessage());
+            
+            // Error del mock o conexión → 502 Bad Gateway
+            if (e.getMessage() != null && e.getMessage().contains("conexión")) {
+                return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                        .body(Map.of(
+                                "error", "Bad Gateway",
+                                "message", "Error de conexión con el servicio de pago",
+                                "details", e.getMessage()
+                        ));
+            }
+            
+            // Otros errores → 500 Internal Server Error
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "error", "Internal Server Error",
+                            "message", "Error al procesar la venta",
+                            "details", e.getMessage()
+                    ));
+        }
+    }
+    
+    // =============================================
+    // TRANSBANK MOCK ENDPOINTS (flujo manual)
     // =============================================
     
     /**
