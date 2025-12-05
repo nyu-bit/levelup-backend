@@ -8,7 +8,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -19,11 +18,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -52,47 +46,17 @@ public class SecurityConfig {
         return authConfig.getAuthenticationManager();
     }
     
-    /**
-     * 🔥 Configuración GLOBAL de CORS
-     * Un solo bean centralizado para evitar conflictos
-     */
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-
-        // 👇 ORIGINS PERMITIDOS (tu frontend de Vercel y localhost)
-        config.setAllowedOrigins(List.of(
-            "https://react-prueba-hwdmc8ijb-maria-jose-contreras-s-projects.vercel.app",
-            "https://levelupgamer.lol",
-            "https://www.levelupgamer.lol",
-            "http://localhost:5173",
-            "http://localhost:3000"
-        ));
-
-        // Métodos HTTP permitidos
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-
-        // Headers permitidos
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));
-
-        // Para Authorization Bearer desde el front
-        config.setAllowCredentials(true);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        // Aplica a toda la API
-        source.registerCorsConfiguration("/**", config);
-
-        return source;
-    }
+    // ❌ CORS DESACTIVADO EN SPRING - Nginx lo maneja completamente
+    // No hay CorsConfigurationSource, no hay .cors(), nada de CORS aquí.
     
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            // 🔥 IMPORTANTE: desactivar CSRF para APIs REST
+            // Desactivar CSRF para APIs REST
             .csrf(AbstractHttpConfigurer::disable)
             
-            // 🔥 IMPORTANTE: decirle a Spring que use el bean corsConfigurationSource()
-            .cors(Customizer.withDefaults())
+            // 🔥 CORS DESACTIVADO - Nginx maneja CORS completamente
+            .cors(AbstractHttpConfigurer::disable)
             
             // Stateless (usamos JWT)
             .sessionManagement(session -> 
@@ -101,10 +65,13 @@ public class SecurityConfig {
             
             // Configurar autorización de requests
             .authorizeHttpRequests(auth -> auth
-                // 🔓 Rutas públicas de autenticación
+                // Permitir OPTIONS para preflight (Nginx maneja CORS, pero Spring debe dejar pasar OPTIONS)
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                
+                // Rutas públicas de autenticación
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 
-                // 🔓 Permitir ver productos sin login
+                // Permitir ver productos sin login
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                 
                 // Swagger/OpenAPI público
@@ -129,7 +96,7 @@ public class SecurityConfig {
                 // Resto de ventas requieren autenticación
                 .requestMatchers("/api/v1/sales/**").authenticated()
                 
-                // 🔒 El resto protegido
+                // El resto protegido
                 .anyRequest().authenticated()
             )
             
