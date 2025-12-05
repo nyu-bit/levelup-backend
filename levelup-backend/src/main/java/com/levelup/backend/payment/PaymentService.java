@@ -1,10 +1,12 @@
 package com.levelup.backend.payment;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -16,19 +18,47 @@ import java.util.UUID;
 /**
  * Servicio para procesar pagos a través del mock de Transbank.
  * Las llamadas se hacen desde el backend para evitar problemas de CORS.
+ * 
+ * Configuración en application.properties:
+ * - payment.transbank.mock-base-url: URL base del mock
+ * - payment.transbank.return-url: URL de retorno al frontend
+ * - payment.transbank.callback-url: URL de callback del backend
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class PaymentService {
 
     private final RestTemplate restTemplate;
 
-    @Value("${transbank.mock.url:https://webpay.mock/api/transaction}")
-    private String transbankMockUrl;
+    // ============================================
+    // Propiedades inyectadas desde application.properties
+    // Cambiar según ambiente (dev, ec2, prod)
+    // ============================================
+    
+    @Value("${payment.transbank.mock-base-url:https://webpay.mock/api}")
+    private String transbankMockBaseUrl;
 
-    @Value("${transbank.return.url:https://levelupgamer.lol/pago/retorno}")
+    @Value("${payment.transbank.mock-init-endpoint:${payment.transbank.mock-base-url}/transaction}")
+    private String transbankInitEndpoint;
+
+    @Value("${payment.transbank.mock-status-endpoint:${payment.transbank.mock-base-url}/status}")
+    private String transbankStatusEndpoint;
+
+    @Value("${payment.transbank.mock-confirm-endpoint:${payment.transbank.mock-base-url}/confirm}")
+    private String transbankConfirmEndpoint;
+
+    @Value("${payment.transbank.return-url:https://levelupgamer.lol/pago/retorno}")
     private String returnUrl;
+
+    @Value("${payment.transbank.callback-url:}")
+    private String callbackUrl;
+
+    @Value("${app.base-url:http://localhost:8080}")
+    private String appBaseUrl;
+
+    public PaymentService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     /**
      * Procesa un pago llamando al mock de Transbank.
@@ -39,6 +69,7 @@ public class PaymentService {
      */
     public PaymentResponse procesarPagoConMock(String orderId, BigDecimal total) {
         log.info("Iniciando pago con mock de Transbank. OrderId: {}, Total: {}", orderId, total);
+        log.debug("URL del mock: {}", transbankInitEndpoint);
 
         // Construir el body de la petición
         Map<String, Object> requestBody = new HashMap<>();
@@ -46,6 +77,11 @@ public class PaymentService {
         requestBody.put("amount", total.intValue());
         requestBody.put("session_id", "LVLUP-" + orderId);
         requestBody.put("return_url", returnUrl);
+        
+        // Agregar callback URL si está configurada
+        if (callbackUrl != null && !callbackUrl.isEmpty()) {
+            requestBody.put("callback_url", callbackUrl);
+        }
 
         // Configurar headers
         HttpHeaders headers = new HttpHeaders();
@@ -54,10 +90,10 @@ public class PaymentService {
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
         try {
-            log.info("Llamando al mock de Transbank en: {}", transbankMockUrl);
+            log.info("Llamando al mock de Transbank en: {}", transbankInitEndpoint);
             
             ResponseEntity<PaymentResponse> response = restTemplate.exchange(
-                    transbankMockUrl,
+                    transbankInitEndpoint,
                     HttpMethod.POST,
                     request,
                     PaymentResponse.class
@@ -72,19 +108,44 @@ public class PaymentService {
 
             return paymentResponse;
 
-        } catch (RestClientException e) {
-            log.error("Error al llamar al mock de Transbank: {}", e.getMessage());
+        } catch (HttpClientErrorException e) {
+            // Errores 4xx (Bad Request, Not Found, etc.)
+            log.error("Error del cliente al llamar al mock ({}): {}", e.getStatusCode(), e.getMessage());
+            return buildErrorResponse(orderId, total, 
+                    "Error en la solicitud de pago: " + e.getStatusCode().value());
             
-            // Retornar respuesta de error
-            return PaymentResponse.builder()
-                    .token(null)
-                    .approved(false)
-                    .status("ERROR")
-                    .message("Error de conexión con el servicio de pago: " + e.getMessage())
-                    .buyOrder(orderId)
-                    .amount(total.intValue())
-                    .build();
+        } catch (HttpServerErrorException e) {
+            // Errores 5xx (Internal Server Error, etc.)
+            log.error("Error del servidor mock ({}): {}", e.getStatusCode(), e.getMessage());
+            return buildErrorResponse(orderId, total, 
+                    "El servicio de pago no está disponible. Intente nuevamente.");
+            
+        } catch (ResourceAccessException e) {
+            // Timeout o conexión rechazada
+            log.error("Error de conexión con el mock: {}", e.getMessage());
+            return buildErrorResponse(orderId, total, 
+                    "No se pudo conectar con el servicio de pago. Verifique su conexión e intente nuevamente.");
+            
+        } catch (RestClientException e) {
+            // Otros errores de RestTemplate
+            log.error("Error al llamar al mock de Transbank: {}", e.getMessage());
+            return buildErrorResponse(orderId, total, 
+                    "Error al procesar el pago. Intente nuevamente.");
         }
+    }
+
+    /**
+     * Construye una respuesta de error estandarizada.
+     */
+    private PaymentResponse buildErrorResponse(String orderId, BigDecimal total, String message) {
+        return PaymentResponse.builder()
+                .token(null)
+                .approved(false)
+                .status("ERROR")
+                .message(message)
+                .buyOrder(orderId)
+                .amount(total.intValue())
+                .build();
     }
 
     /**
@@ -128,9 +189,10 @@ public class PaymentService {
     public PaymentResponse consultarEstado(String token) {
         log.info("Consultando estado de transacción. Token: {}", token);
 
-        String statusUrl = transbankMockUrl + "/status/" + token;
+        String statusUrl = transbankStatusEndpoint + "/" + token;
 
         try {
+            log.debug("Consultando estado en: {}", statusUrl);
             ResponseEntity<PaymentResponse> response = restTemplate.getForEntity(
                     statusUrl,
                     PaymentResponse.class
@@ -138,9 +200,26 @@ public class PaymentService {
 
             return response.getBody();
 
+        } catch (HttpClientErrorException | HttpServerErrorException e) {
+            log.error("Error HTTP al consultar estado ({}): {}", e.getStatusCode(), e.getMessage());
+            return PaymentResponse.builder()
+                    .token(token)
+                    .approved(false)
+                    .status("ERROR")
+                    .message("Error al consultar estado del pago: " + e.getStatusCode().value())
+                    .build();
+                    
+        } catch (ResourceAccessException e) {
+            log.error("Error de conexión al consultar estado: {}", e.getMessage());
+            return PaymentResponse.builder()
+                    .token(token)
+                    .approved(false)
+                    .status("ERROR")
+                    .message("No se pudo conectar con el servicio de pago.")
+                    .build();
+                    
         } catch (RestClientException e) {
             log.error("Error al consultar estado: {}", e.getMessage());
-            
             return PaymentResponse.builder()
                     .token(token)
                     .approved(false)
@@ -159,8 +238,6 @@ public class PaymentService {
     public PaymentResponse confirmarTransaccion(String token) {
         log.info("Confirmando transacción. Token: {}", token);
 
-        String confirmUrl = transbankMockUrl + "/confirm";
-
         Map<String, String> requestBody = new HashMap<>();
         requestBody.put("token", token);
 
@@ -170,8 +247,9 @@ public class PaymentService {
         HttpEntity<Map<String, String>> request = new HttpEntity<>(requestBody, headers);
 
         try {
+            log.debug("Confirmando transacción en: {}", transbankConfirmEndpoint);
             ResponseEntity<PaymentResponse> response = restTemplate.exchange(
-                    confirmUrl,
+                    transbankConfirmEndpoint,
                     HttpMethod.POST,
                     request,
                     PaymentResponse.class
@@ -179,9 +257,26 @@ public class PaymentService {
 
             return response.getBody();
 
+        } catch (HttpClientErrorException | HttpServerErrorException e) {
+            log.error("Error HTTP al confirmar transacción ({}): {}", e.getStatusCode(), e.getMessage());
+            return PaymentResponse.builder()
+                    .token(token)
+                    .approved(false)
+                    .status("ERROR")
+                    .message("Error al confirmar el pago: " + e.getStatusCode().value())
+                    .build();
+                    
+        } catch (ResourceAccessException e) {
+            log.error("Error de conexión al confirmar: {}", e.getMessage());
+            return PaymentResponse.builder()
+                    .token(token)
+                    .approved(false)
+                    .status("ERROR")
+                    .message("No se pudo conectar con el servicio de pago.")
+                    .build();
+                    
         } catch (RestClientException e) {
             log.error("Error al confirmar transacción: {}", e.getMessage());
-            
             return PaymentResponse.builder()
                     .token(token)
                     .approved(false)

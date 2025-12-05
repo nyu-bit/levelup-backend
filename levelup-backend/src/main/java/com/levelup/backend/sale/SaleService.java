@@ -9,6 +9,7 @@ import com.levelup.backend.user.User;
 import com.levelup.backend.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -36,9 +37,10 @@ public class SaleService {
     
     // Costo de envío fijo (puede modificarse a una lógica más compleja)
     private static final int SHIPPING_COST = 3990;
-    
-    // URL simulada de Webpay
-    private static final String WEBPAY_MOCK_URL = "https://webpay.mock/redirect";
+
+    // URL de redirección a Webpay (configurada en application.properties)
+    @Value("${payment.transbank.mock-base-url:https://webpay.mock/redirect}")
+    private String webpayMockUrl;
 
     /**
      * Crea una venta y procesa el pago a través del mock de Transbank.
@@ -361,7 +363,7 @@ public class SaleService {
         // Retornar respuesta con token y URL de redirección
         return InitTransactionResponse.builder()
                 .token(transbankToken)
-                .url(WEBPAY_MOCK_URL)
+                .url(webpayMockUrl)
                 .saleId(savedSale.getId())
                 .subtotal(subtotal)
                 .iva(iva)
