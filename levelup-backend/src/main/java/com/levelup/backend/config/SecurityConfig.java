@@ -97,6 +97,15 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/sales/transbank/callback").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/sales/payment-status/**").permitAll()
                 
+                // Webpay Plus SDK endpoints
+                // - /return debe ser público (Transbank hace POST/GET aquí)
+                // - /health público para health checks
+                // - /orders puede ser autenticado
+                .requestMatchers("/api/payments/webpay/return").permitAll()
+                .requestMatchers("/api/payments/webpay/health").permitAll()
+                .requestMatchers("/api/payments/webpay/create").authenticated()
+                .requestMatchers("/api/payments/webpay/orders/**").authenticated()
+                
                 // Resto de ventas requieren autenticación
                 .requestMatchers("/api/v1/sales/**").authenticated()
                 
