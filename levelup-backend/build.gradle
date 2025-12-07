@@ -22,6 +22,7 @@ configurations {
 
 repositories {
 	mavenCentral()
+	maven { url 'https://jitpack.io' }
 }
 
 dependencies {
@@ -49,6 +50,9 @@ dependencies {
 	// Database
 	runtimeOnly 'com.h2database:h2'
 	runtimeOnly 'com.mysql:mysql-connector-j'
+	
+	// Transbank Webpay Plus SDK
+	implementation 'com.github.TransbankDevelopers:transbank-sdk-java:3.0.0'
 	
 	// Test
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'

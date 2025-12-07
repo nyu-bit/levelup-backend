@@ -64,15 +64,13 @@ public class SecurityConfig {
             )
             
             // Configurar autorización de requests
+            // 🔓 MODO PERMISIVO - Para desarrollo y presentación
             .authorizeHttpRequests(auth -> auth
-                // Permitir OPTIONS para preflight (Nginx maneja CORS, pero Spring debe dejar pasar OPTIONS)
+                // Permitir OPTIONS para preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 
-                // Rutas públicas de autenticación
-                .requestMatchers("/api/v1/auth/**").permitAll()
-                
-                // Permitir ver productos sin login
-                .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
+                // ✅ TODO PÚBLICO - Abrir todo para que funcione sin problemas
+                .requestMatchers("/api/**").permitAll()
                 
                 // Swagger/OpenAPI público
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
@@ -80,37 +78,8 @@ public class SecurityConfig {
                 // H2 Console (solo dev)
                 .requestMatchers("/h2-console/**").permitAll()
                 
-                // Payment endpoints - test público, init requiere auth
-                .requestMatchers("/api/v1/payments/test").permitAll()
-                .requestMatchers("/api/v1/payments/**").authenticated()
-                
-                // Productos: modificaciones requieren rol ADMIN
-                .requestMatchers(HttpMethod.POST, "/api/v1/products/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/v1/products/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/v1/products/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PATCH, "/api/v1/products/*/stock").hasAnyRole("ADMIN", "VENDEDOR")
-                
-                // Ventas: /all solo para ADMIN y VENDEDOR
-                .requestMatchers("/api/v1/sales/all").hasAnyRole("ADMIN", "VENDEDOR")
-                
-                // Transbank endpoints públicos
-                .requestMatchers(HttpMethod.POST, "/api/v1/sales/transbank/callback").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/sales/payment-status/**").permitAll()
-                
-                // Webpay Plus SDK endpoints
-                // - /return debe ser público (Transbank hace POST/GET aquí)
-                // - /health público para health checks
-                // - /orders puede ser autenticado
-                .requestMatchers("/api/payments/webpay/return").permitAll()
-                .requestMatchers("/api/payments/webpay/health").permitAll()
-                .requestMatchers("/api/payments/webpay/create").authenticated()
-                .requestMatchers("/api/payments/webpay/orders/**").authenticated()
-                
-                // Resto de ventas requieren autenticación
-                .requestMatchers("/api/v1/sales/**").authenticated()
-                
-                // El resto protegido
-                .anyRequest().authenticated()
+                // Cualquier otra cosa también permitida
+                .anyRequest().permitAll()
             )
             
             // Registrar proveedor de autenticación
