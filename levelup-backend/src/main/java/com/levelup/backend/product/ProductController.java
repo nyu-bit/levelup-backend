@@ -13,8 +13,17 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+/**
+ * Controlador REST para productos.
+ * Rutas:
+ * - GET /api/products (paginado)
+ * - GET /api/products/{id}
+ * - POST /api/products (solo ADMIN)
+ * - PUT /api/products/{id} (solo ADMIN)
+ * - DELETE /api/products/{id} (solo ADMIN)
+ */
 @RestController
-@RequestMapping("/api/v1/products")
+@RequestMapping("/api/products")
 @RequiredArgsConstructor
 public class ProductController {
     

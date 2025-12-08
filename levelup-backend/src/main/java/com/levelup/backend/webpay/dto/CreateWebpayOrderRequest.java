@@ -10,6 +10,13 @@ import java.util.List;
 
 /**
  * DTO para solicitar la creación de una orden Webpay.
+ * 
+ * POST /api/payments/webpay/create
+ * {
+ *   "buyOrder": "ORDEN-123",
+ *   "sessionId": "SESSION-123",
+ *   "amount": 9990
+ * }
  */
 @Data
 @Builder
@@ -18,9 +25,16 @@ import java.util.List;
 public class CreateWebpayOrderRequest {
     
     /**
-     * ID del usuario que realiza la compra (opcional).
+     * Número de orden de compra (máximo 26 caracteres).
+     * Si no se proporciona, se genera automáticamente.
      */
-    private Long userId;
+    private String buyOrder;
+    
+    /**
+     * ID de sesión (máximo 61 caracteres).
+     * Si no se proporciona, se genera automáticamente.
+     */
+    private String sessionId;
     
     /**
      * Monto total de la orden.
@@ -28,7 +42,12 @@ public class CreateWebpayOrderRequest {
     private BigDecimal amount;
     
     /**
-     * Lista de items de la orden.
+     * ID del usuario que realiza la compra (opcional).
+     */
+    private Long userId;
+    
+    /**
+     * Lista de items de la orden (opcional).
      */
     private List<OrderItemRequest> items;
     

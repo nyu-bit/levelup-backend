@@ -22,8 +22,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
- * Servicio para integración con Webpay Plus usando el SDK oficial de Transbank v3.x.
+ * Servicio para integración con Webpay Plus usando el SDK oficial de Transbank.
  * Configurado para ambiente de integración (testing).
+ * 
+ * El SDK 3.0.0 usa ambiente de integración por defecto con:
+ * - Commerce Code: 597055555532
+ * - API Key: 579B532A7440BB0C9079DED94D31EA1615BACEB56610332264630D42D0A36B1C
  */
 @Service
 @Slf4j
@@ -44,9 +48,10 @@ public class WebpayService {
             UserRepository userRepository) {
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
-        // Crear instancia configurada para ambiente de integración (testing)
+        
+        // SDK 3.0.0 usa ambiente de integración por defecto
         this.transaction = new WebpayPlus.Transaction();
-        log.info("Webpay Plus configurado para ambiente de INTEGRACIÓN");
+        log.info("Webpay Plus configurado para ambiente de INTEGRACIÓN (SDK 3.0.0)");
     }
 
     /**
@@ -54,16 +59,21 @@ public class WebpayService {
      */
     @Transactional
     public WebpayCreateResponse initTransaction(CreateWebpayOrderRequest request) {
-        log.info("Iniciando transacción Webpay para usuario: {}", request.getUserId());
+        log.info("Iniciando transacción Webpay - amount: {}, buyOrder: {}, sessionId: {}", 
+                request.getAmount(), request.getBuyOrder(), request.getSessionId());
 
         User user = null;
         if (request.getUserId() != null) {
             user = userRepository.findById(request.getUserId()).orElse(null);
         }
 
-        // Generar buy order único (máximo 26 caracteres)
-        String buyOrder = "ORD" + System.currentTimeMillis();
-        String sessionId = UUID.randomUUID().toString().substring(0, 20);
+        // Usar buyOrder/sessionId del request o generar nuevos
+        String buyOrder = (request.getBuyOrder() != null && !request.getBuyOrder().isEmpty()) 
+                ? request.getBuyOrder() 
+                : "ORD" + System.currentTimeMillis();
+        String sessionId = (request.getSessionId() != null && !request.getSessionId().isEmpty()) 
+                ? request.getSessionId() 
+                : UUID.randomUUID().toString().substring(0, 20);
         double amount = request.getAmount().doubleValue();
 
         WebpayOrder order = WebpayOrder.builder()
