@@ -21,7 +21,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/v1/sales")
+@RequestMapping("/api/sales")
 @RequiredArgsConstructor
 @Slf4j
 public class SaleController {
@@ -34,7 +34,7 @@ public class SaleController {
     
     /**
      * Crea una venta y procesa el pago con el mock de Transbank.
-     * POST /api/v1/sales/checkout
+     * POST /api/sales/checkout
      * 
      * - Genera orderId único (UUID)
      * - Llama al PaymentService.procesarPagoConMock

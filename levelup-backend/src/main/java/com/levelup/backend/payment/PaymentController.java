@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
  * Todas las llamadas al mock se hacen desde el backend para evitar CORS.
  */
 @RestController
-@RequestMapping("/api/v1/payments")
+@RequestMapping("/api/payments")
 @RequiredArgsConstructor
 @Slf4j
 public class PaymentController {
@@ -20,7 +20,7 @@ public class PaymentController {
 
     /**
      * Inicia un pago llamando al mock de Transbank.
-     * POST /api/v1/payments/init
+     * POST /api/payments/init
      */
     @PostMapping("/init")
     public ResponseEntity<PaymentResponse> initPayment(@Valid @RequestBody PaymentRequest request) {
@@ -47,7 +47,7 @@ public class PaymentController {
 
     /**
      * Consulta el estado de una transacción.
-     * GET /api/v1/payments/status/{token}
+     * GET /api/payments/status/{token}
      */
     @GetMapping("/status/{token}")
     public ResponseEntity<PaymentResponse> getStatus(@PathVariable String token) {
@@ -58,7 +58,7 @@ public class PaymentController {
 
     /**
      * Confirma una transacción después del retorno de Webpay.
-     * POST /api/v1/payments/confirm
+     * POST /api/payments/confirm
      */
     @PostMapping("/confirm")
     public ResponseEntity<PaymentResponse> confirmPayment(@RequestParam String token) {
@@ -69,7 +69,7 @@ public class PaymentController {
 
     /**
      * Endpoint de prueba con mock local (siempre funciona).
-     * POST /api/v1/payments/test
+     * POST /api/payments/test
      */
     @PostMapping("/test")
     public ResponseEntity<PaymentResponse> testPayment(@Valid @RequestBody PaymentRequest request) {
