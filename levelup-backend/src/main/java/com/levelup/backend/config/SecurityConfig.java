@@ -35,20 +35,22 @@ public class SecurityConfig {
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             .authorizeHttpRequests(auth -> auth
+                // Endpoints ProductController públicos
+                .requestMatchers(HttpMethod.GET, "/", "/*").permitAll()
+                .requestMatchers(HttpMethod.POST, "/", "/*").permitAll()
+                .requestMatchers(HttpMethod.PUT, "/*").permitAll()
+                .requestMatchers(HttpMethod.DELETE, "/*").permitAll()
 
-                // 🔓 PÚBLICOS ----> ESTO SOLUCIONA TU 403
-                .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                // Endpoints públicos adicionales
+                .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/**").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/payments/webpay/**").permitAll()
-
-                // Swagger
+                .requestMatchers("/login", "/register").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
-                // 🔒 TODO LO DEMÁS REQUIERE AUTENTICACIÓN
+                // Todo lo demás requiere autenticación JWT
                 .anyRequest().authenticated()
             )
-
-            // Filtro JWT
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
