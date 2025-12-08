@@ -3,12 +3,12 @@ package com.levelup.backend.config;
 import com.levelup.backend.security.CustomUserDetailsService;
 import com.levelup.backend.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -23,22 +23,23 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
 import java.util.List;
 
 /**
- * Configuración de seguridad Spring Security.
+ * Configuración de seguridad Spring Security para Level-Up Gamer.
+ * 
+ * CORS habilitado para:
+ * - https://levelupgamer.lol (producción)
+ * - https://www.levelupgamer.lol (producción con www)
+ * - http://localhost:5173 (desarrollo Vite)
  * 
  * Rutas públicas (sin autenticación):
- * - POST /api/auth/register
- * - POST /api/auth/login
- * - GET /api/products/**
- * - POST /api/payments/webpay/create
- * - POST /api/payments/webpay/commit
- * - GET|POST /api/payments/webpay/return
+ * - /api/auth/** (registro, login)
+ * - GET /api/products/** (catálogo)
+ * - /api/payments/webpay/** (pagos)
+ * - /swagger-ui/**, /v3/api-docs/** (documentación)
  * 
  * Rutas protegidas (requieren JWT):
- * - GET /api/auth/me
  * - Todo lo demás
  */
 @Configuration
@@ -49,9 +50,6 @@ public class SecurityConfig {
     
     private final CustomUserDetailsService customUserDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    
-    @Value("${app.frontend.base-url:https://levelupgamer.lol}")
-    private String frontendBaseUrl;
     
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -73,37 +71,47 @@ public class SecurityConfig {
     
     /**
      * Configuración de CORS.
-     * Permite requests desde el frontend.
+     * Permite requests desde el frontend en producción y desarrollo.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList(
-                frontendBaseUrl,
-                "https://levelupgamer.lol",
-                "http://localhost:3000",
-                "http://localhost:5173"
+        CorsConfiguration config = new CorsConfiguration();
+        
+        // 🔹 Dominios que pueden llamar a la API
+        config.setAllowedOrigins(List.of(
+                "https://levelupgamer.lol",       // frontend producción
+                "https://www.levelupgamer.lol",   // frontend producción con www
+                "http://localhost:5173"           // frontend local Vite
         ));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Content-Type", "Authorization", "X-Requested-With"));
-        configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
+        
+        // Métodos HTTP permitidos
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        
+        // Headers permitidos (todos)
+        config.setAllowedHeaders(List.of("*"));
+        
+        // Para que se envíe el token JWT en headers
+        config.setAllowCredentials(true);
+        
+        // Cache preflight por 1 hora
+        config.setMaxAge(3600L);
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+        source.registerCorsConfiguration("/**", config);  // aplica a todas las rutas
+        
         return source;
     }
     
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            // Desactivar CSRF para APIs REST
+            // 🔥 CORS habilitado con Customizer.withDefaults() - usa corsConfigurationSource automáticamente
+            .cors(Customizer.withDefaults())
+            
+            // Desactivar CSRF para APIs REST stateless
             .csrf(AbstractHttpConfigurer::disable)
             
-            // Habilitar CORS con la configuración definida
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            
-            // Stateless (usamos JWT)
+            // Sesión stateless (usamos JWT, no sesiones)
             .sessionManagement(session -> 
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
@@ -115,28 +123,24 @@ public class SecurityConfig {
                 
                 // === RUTAS PÚBLICAS ===
                 
-                // Auth - registro y login
-                .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
+                // Auth - todos los endpoints de autenticación públicos
+                .requestMatchers("/api/auth/**").permitAll()
                 
-                // Products - lectura pública
+                // Products - lectura pública (catálogo)
                 .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                 
-                // Webpay - endpoints de pago públicos
-                .requestMatchers("/api/payments/webpay/create").permitAll()
-                .requestMatchers("/api/payments/webpay/commit").permitAll()
-                .requestMatchers("/api/payments/webpay/return").permitAll()
-                .requestMatchers("/api/payments/webpay/health").permitAll()
+                // Webpay - todos los endpoints de pago públicos
+                .requestMatchers("/api/payments/webpay/**").permitAll()
                 
-                // Swagger/OpenAPI
-                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                // Swagger/OpenAPI - documentación pública
+                .requestMatchers("/swagger-ui/**").permitAll()
+                .requestMatchers("/swagger-ui.html").permitAll()
+                .requestMatchers("/v3/api-docs/**").permitAll()
                 
                 // H2 Console (solo dev)
                 .requestMatchers("/h2-console/**").permitAll()
                 
                 // === RUTAS PROTEGIDAS ===
-                
-                // Auth - obtener usuario actual requiere JWT
-                .requestMatchers("/api/auth/me").authenticated()
                 
                 // Products - crear/editar/eliminar requiere ADMIN
                 .requestMatchers(HttpMethod.POST, "/api/products/**").hasRole("ADMIN")
@@ -153,7 +157,7 @@ public class SecurityConfig {
             // Filtro JWT antes del UsernamePasswordAuthenticationFilter
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             
-            // Para H2 Console (frames)
+            // Para H2 Console (frames) - solo en desarrollo
             .headers(headers -> headers.frameOptions(frame -> frame.disable()));
         
         return http.build();
