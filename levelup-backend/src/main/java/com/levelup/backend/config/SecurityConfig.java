@@ -4,19 +4,14 @@ import com.levelup.backend.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -29,26 +24,26 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            .cors(Customizer.withDefaults())
+            // 🔴 Desactivamos CSRF porque usamos JWT
             .csrf(csrf -> csrf.disable())
+
+            // 🔴 CORS se maneja desde el frontend / controller
+            .cors(cors -> cors.disable())
+
+            // 🔴 JWT = sin sesiones
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
+
+            // 🔴 RUTAS
             .authorizeHttpRequests(auth -> auth
-                // Endpoints ProductController públicos
-                .requestMatchers(HttpMethod.GET, "/", "/*").permitAll()
-                .requestMatchers(HttpMethod.POST, "/", "/*").permitAll()
-                .requestMatchers(HttpMethod.PUT, "/*").permitAll()
-                .requestMatchers(HttpMethod.DELETE, "/*").permitAll()
+                // ✅ LOGIN y AUTH públicos
+                .requestMatchers("/api/v1/auth/**").permitAll()
 
-                // Endpoints públicos adicionales
-                .requestMatchers(HttpMethod.GET, "/api/products", "/api/products/**").permitAll()
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/api/payments/webpay/**").permitAll()
-                .requestMatchers("/login", "/register").permitAll()
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                // ✅ Health y actuator (útil para EC2)
+                .requestMatchers("/actuator/**").permitAll()
 
-                // Todo lo demás requiere autenticación JWT
+                // 🔐 Todo lo demás requiere JWT
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -57,26 +52,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-
-        config.setAllowedOrigins(List.of(
-            "https://levelupgamer.lol",
-            "https://www.levelupgamer.lol",
-            "http://localhost:5173"
-        ));
-
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-
-        // 🔥 FIX REAL: permitir TODOS los headers para evitar 403
-        config.setAllowedHeaders(List.of("*"));
-
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-
-        return source;
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }
