@@ -1,30 +1,3 @@
-plugins {
-	id 'java'
-	id 'org.springframework.boot' version '3.2.0'
-	id 'io.spring.dependency-management' version '1.1.4'
-}
-
-group = 'com.levelup'
-version = '0.0.1-SNAPSHOT'
-description = 'Level-Up Gamer Backend - Tienda de videojuegos'
-
-java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(17)
-	}
-}
-
-configurations {
-	compileOnly {
-		extendsFrom annotationProcessor
-	}
-}
-
-repositories {
-	mavenCentral()
-	maven { url 'https://jitpack.io' }
-}
-
 dependencies {
 	// Spring Boot Starters
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -32,12 +5,12 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	
-	// JWT (JSON Web Token)
+	// JWT
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'
 	
-	// Swagger / OpenAPI
+	// Swagger
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
 	
 	// Lombok
@@ -48,23 +21,14 @@ dependencies {
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	
 	// Database
-	runtimeOnly 'com.h2database:h2'
-	runtimeOnly 'com.mysql:mysql-connector-j'
+	runtimeOnly 'com.h2database:h2' // solo dev
+	implementation 'org.mariadb.jdbc:mariadb-java-client:3.3.3'
 	
-	// Transbank Webpay Plus SDK
+	// Transbank (Webpay simulado)
 	implementation 'com.github.TransbankDevelopers:transbank-sdk-java:3.0.0'
 	
 	// Test
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.security:spring-security-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
-tasks.named('test') {
-	useJUnitPlatform()
-}
-
-// Desactivar el JAR plain (solo generar el ejecutable)
-jar {
-	enabled = false
 }
